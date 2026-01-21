@@ -1134,6 +1134,38 @@ static void publish_parameter_mqtt(parameter_t *param) {
     }
 }
 
+// Publish a descriptive error to a dedicated MQTT error topic
+static void publish_parameter_error_mqtt(const parameter_t *param, const char *reason) {
+    char error_topic[128];
+    const char *status_topic = config_server_get_mqtt_status_topic();
+
+    if (status_topic && strlen(status_topic) + 6 < sizeof(error_topic)) {
+        // Append "/error" to the configured status topic
+        snprintf(error_topic, sizeof(error_topic), "%s/error", status_topic);
+    } else {
+        // Fallback topic if status topic is missing or too long
+        snprintf(error_topic, sizeof(error_topic), "wican/error");
+    }
+
+    cJSON *error_json = cJSON_CreateObject();
+    if (!error_json) {
+        ESP_LOGE(TAG, "Failed to allocate error JSON");
+        return;
+    }
+
+    cJSON_AddStringToObject(error_json, "parameter", param && param->name ? param->name : "unknown");
+    cJSON_AddStringToObject(error_json, "reason", reason ? reason : "unknown");
+
+    char *payload = cJSON_PrintUnformatted(error_json);
+    cJSON_Delete(error_json);
+
+    if (payload) {
+        mqtt_publish(error_topic, payload, 0, 0, 1);
+        ESP_LOGW(TAG, "Published error for %s: %s", param && param->name ? param->name : "unknown", payload);
+        free(payload);
+    }
+}
+
 
 static void autopid_task(void *pvParameters)
 {
@@ -1327,6 +1359,9 @@ static void autopid_task(void *pvParameters)
                                                 param->value = result;
                                                 publish_parameter_mqtt(param);
                                             }
+                                        } else {
+                                            param->failed = true;
+                                            publish_parameter_error_mqtt(param, "expression evaluation failed");
                                         }
                                     }
                                     else if(curr_pid->pid_type == PID_STD) 
@@ -1369,6 +1404,8 @@ static void autopid_task(void *pvParameters)
  
                                                         if (err != ESP_OK) {
                                                             ESP_LOGE(TAG, "Failed to extract signal: %s", esp_err_to_name(err));
+                                                            param->failed = true;
+                                                            publish_parameter_error_mqtt(param, esp_err_to_name(err));
                                                             break;
                                                         }
                                                         param->value = roundf(param->value * 100.0) / 100.0;
@@ -1389,22 +1426,26 @@ static void autopid_task(void *pvParameters)
                                 {   
                                     param->failed = true;
                                     ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
+                                    publish_parameter_error_mqtt(param, "ELM327 returned error");
                                 }
                             }
                             else
                             {
                                 param->failed = true;
                                 ESP_LOGE(TAG, "Failed Queue Receive: curr_pid->cmd timeout");
+                                publish_parameter_error_mqtt(param, "command timeout");
                             }
                         }
                         else 
                         {
                             ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
+                            publish_parameter_error_mqtt(param, "failed to process command");
                         }
                     }
                     else 
                     {
                         ESP_LOGE(TAG, "Failed, cmd is NULL");
+                        publish_parameter_error_mqtt(param, "command is NULL");
                     }
                 }
             }
