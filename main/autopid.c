@@ -49,6 +49,7 @@
 #define ECU_CONNECTED_BIT			        BIT0
 #define AUTOPID_POLLING_DISABLED_BIT	    BIT1
 #define AUTOPID_REQUEST_BIT			        BIT2
+#define AUTOPID_CYCLE_DELAY_MS          5000
 
 static char auto_pid_buf[BUFFER_SIZE];
 static QueueHandle_t autopidQueue;
@@ -1566,7 +1567,8 @@ static void autopid_task(void *pvParameters)
             xEventGroupClearBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // Slow down between full PID cycles to reduce bus/broker load
+        vTaskDelay(pdMS_TO_TICKS(AUTOPID_CYCLE_DELAY_MS));
 
         if (strcmp("enable", all_pids->grouping) == 0 && all_pids->group_destination_type == DEST_MQTT_TOPIC && wc_timer_is_expired(&group_cycle_timer))
         {
