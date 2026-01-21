@@ -1097,20 +1097,45 @@ static void publish_parameter_mqtt(parameter_t *param) {
     if (!param) return;
     
     char *payload = NULL;
+    char topic[256];
+    bool use_custom_topic = false;
     
     switch(param->destination_type) {
+        case DEST_DEFAULT:
+            // Default: JSON format published to rx_topic/param_name
+            {
+                cJSON *param_json = cJSON_CreateObject();
+                if (param_json) {
+                    if (param->sensor_type == BINARY_SENSOR) {
+                        cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
+                    } else {
+                        cJSON_AddNumberToObject(param_json, param->name, param->value);
+                    }
+                    limitJsonDecimalPrecision(param_json);
+                    payload = cJSON_PrintUnformatted(param_json);
+                    cJSON_Delete(param_json);
+                }
+                // Build topic with parameter name
+                const char *base_topic = config_server_get_mqtt_rx_topic();
+                snprintf(topic, sizeof(topic), "%s/%s", base_topic, param->name);
+                use_custom_topic = true;
+            }
+            break;
+            
         case DEST_MQTT_TOPIC:
             // JSON format
-            cJSON *param_json = cJSON_CreateObject();
-            if (param_json) {
-                if (param->sensor_type == BINARY_SENSOR) {
-                    cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
-                } else {
-                    cJSON_AddNumberToObject(param_json, param->name, param->value);
+            {
+                cJSON *param_json = cJSON_CreateObject();
+                if (param_json) {
+                    if (param->sensor_type == BINARY_SENSOR) {
+                        cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
+                    } else {
+                        cJSON_AddNumberToObject(param_json, param->name, param->value);
+                    }
+                    limitJsonDecimalPrecision(param_json);
+                    payload = cJSON_PrintUnformatted(param_json);
+                    cJSON_Delete(param_json);
                 }
-                limitJsonDecimalPrecision(param_json);
-                payload = cJSON_PrintUnformatted(param_json);
-                cJSON_Delete(param_json);
             }
             break;
             
@@ -1123,8 +1148,11 @@ static void publish_parameter_mqtt(parameter_t *param) {
     }
 
     if (payload) {
-        // Publish to specified destination or default topic
-        if (param->destination && strlen(param->destination) > 0) {
+        // Publish to specified destination or constructed topic
+        if (use_custom_topic) {
+            mqtt_publish(topic, payload, 0, 0, 1);
+            ESP_LOGI(TAG, "Published to %s", topic);
+        } else if (param->destination && strlen(param->destination) > 0) {
             mqtt_publish(param->destination, payload, 0, 0, 1);
             ESP_LOGI(TAG, "Published to %s", param->destination);
         } else {
