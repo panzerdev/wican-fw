@@ -1354,6 +1354,8 @@ static void autopid_task(void *pvParameters)
                     }
 
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
+                    // Publish which parameter is about to be fetched
+                    publish_autopid_status_with_param("fetching", param && param->name ? param->name : "unknown");
                     DEBUG_LOGI(TAG, "Processing parameter: %s", param->name);
                     // Reset timer with parameter period
                     wc_timer_set(&param->timer, param->period);
