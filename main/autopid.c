@@ -1273,6 +1273,13 @@ static void autopid_task(void *pvParameters)
 
     while(1) 
     {
+        static bool autopid_status_published = false;
+        if (!autopid_status_published) {
+            // Announce that autopid has started periodic individual fetching
+            publish_autopid_status("started");
+            autopid_status_published = true;
+        }
+
         static pid_type_t previous_pid_type = PID_MAX;
 
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
