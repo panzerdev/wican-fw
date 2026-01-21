@@ -1483,7 +1483,12 @@ static void autopid_task(void *pvParameters)
                                 {   
                                     param->failed = true;
                                     ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
-                                    publish_parameter_error_mqtt(param, "ELM327 returned error");
+                                    char error_details[256];
+                                    snprintf(error_details, sizeof(error_details), 
+                                            "ELM327 returned error for command '%s': %s", 
+                                            curr_pid->cmd ? curr_pid->cmd : "unknown", 
+                                            (char*)elm327_response.data);
+                                    publish_parameter_error_mqtt(param, error_details);
                                 }
                             }
                             else
