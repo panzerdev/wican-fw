@@ -1317,12 +1317,13 @@ static void autopid_task(void *pvParameters)
             xEventGroupWaitBits(xautopid_event_group, AUTOPID_REQUEST_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         }
 
-        // Skip processing if ECU is not connected
+        // If ECU not marked connected, wait a bit but still attempt a fetch to allow reconnection
         if (!(xEventGroupGetBits(xautopid_event_group) & ECU_CONNECTED_BIT)) {
+            publish_autopid_status("waiting_for_ecu");
             vTaskDelay(pdMS_TO_TICKS(5000));
-            continue;
         }
-
+        
+        publish_autopid_status("starting fetch_cycle");
         elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         
@@ -1550,6 +1551,14 @@ static void autopid_task(void *pvParameters)
 
         elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
+
+        // Check if all parameters failed and publish status with that info
+        bool all_failed = all_parameters_failed(all_pids);
+        if (all_failed) {
+            publish_autopid_status("ending fetch_cycle - all parameters failed");
+        } else {
+            publish_autopid_status("ending fetch_cycle - some parameters successful");
+        }
 
         autopid_update_values();
         
