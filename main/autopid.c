@@ -1138,13 +1138,14 @@ static void publish_parameter_mqtt(parameter_t *param) {
 static void publish_parameter_error_mqtt(const parameter_t *param, const char *reason) {
     char error_topic[128];
     const char *status_topic = config_server_get_mqtt_status_topic();
+    const char *param_name = (param && param->name) ? param->name : "unknown";
 
-    if (status_topic && strlen(status_topic) + 6 < sizeof(error_topic)) {
-        // Append "/error" to the configured status topic
-        snprintf(error_topic, sizeof(error_topic), "%s/error", status_topic);
+    if (status_topic && strlen(status_topic) + strlen(param_name) + 8 < sizeof(error_topic)) {
+        // Append "/error/{param_name}" to the configured status topic
+        snprintf(error_topic, sizeof(error_topic), "%s/error/%s", status_topic, param_name);
     } else {
         // Fallback topic if status topic is missing or too long
-        snprintf(error_topic, sizeof(error_topic), "wican/error");
+        snprintf(error_topic, sizeof(error_topic), "wican/error/%s", param_name);
     }
 
     cJSON *error_json = cJSON_CreateObject();
