@@ -1482,12 +1482,13 @@ static void autopid_task(void *pvParameters)
                                 else
                                 {   
                                     param->failed = true;
-                                    ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
-                                    char error_details[256];
-                                    snprintf(error_details, sizeof(error_details), 
-                                            "ELM327 returned error for command '%s': %s", 
-                                            curr_pid->cmd ? curr_pid->cmd : "unknown", 
-                                            (char*)elm327_response.data);
+                                        ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
+                                        char error_details[256];
+                                        // Cap inserted strings to avoid -Wformat-truncation warnings
+                                        snprintf(error_details, sizeof(error_details),
+                                             "ELM327 returned error for command '%.48s': %.128s",
+                                             curr_pid->cmd ? curr_pid->cmd : "unknown",
+                                             (char*)elm327_response.data);
                                     publish_parameter_error_mqtt(param, error_details);
                                 }
                             }
