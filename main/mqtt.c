@@ -120,7 +120,23 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			
             esp_mqtt_client_subscribe(client, mqtt_cmd_topic, 0);
 			gpio_set_level(mqtt_led, 0);
-			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
+            /**
+             * @brief Buffer to store MQTT status messages
+             * 
+             * This character array is used to format and temporarily hold status messages
+             * that will be published to MQTT topics. The buffer size of 128 bytes should
+             * accommodate typical status message content including device state, error
+             * codes, and diagnostic information.
+             */
+            char status_msg[128];
+            esp_netif_ip_info_t ip_info;
+            esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+            if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+                snprintf(status_msg, sizeof(status_msg), "{\"status\": \"online\", \"ip\": \"" IPSTR "\"}", IP2STR(&ip_info.ip));
+            } else {
+                strcpy(status_msg, "{\"status\": \"online\"}");
+            }
+            esp_mqtt_client_publish(client, mqtt_status_topic, status_msg, 0, 0, 1);
 
             xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 			break;
