@@ -1167,6 +1167,53 @@ static void publish_parameter_error_mqtt(const parameter_t *param, const char *r
     }
 }
 
+// Publish a simple autopid status message to a dedicated status subtopic
+static void publish_autopid_status(const char *state) {
+    char topic[128];
+    const char *status_topic = config_server_get_mqtt_status_topic();
+    if (status_topic && strlen(status_topic) + 8 < sizeof(topic)) {
+        // Append "/autopid" to the configured status topic
+        snprintf(topic, sizeof(topic), "%s/autopid", status_topic);
+    } else {
+        // Fallback topic
+        snprintf(topic, sizeof(topic), "wican/autopid/status");
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return;
+    cJSON_AddStringToObject(root, "state", state ? state : "unknown");
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (payload) {
+        mqtt_publish(topic, payload, 0, 0, 1);
+        free(payload);
+    }
+}
+
+// Publish autopid status with current parameter name
+static void publish_autopid_status_with_param(const char *state, const char *param_name) {
+    char topic[128];
+    const char *status_topic = config_server_get_mqtt_status_topic();
+    if (status_topic && strlen(status_topic) + 8 < sizeof(topic)) {
+        // Append "/autopid" to the configured status topic
+        snprintf(topic, sizeof(topic), "%s/autopid", status_topic);
+    } else {
+        // Fallback topic
+        snprintf(topic, sizeof(topic), "wican/autopid/status");
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return;
+    cJSON_AddStringToObject(root, "state", state ? state : "unknown");
+    cJSON_AddStringToObject(root, "param", param_name ? param_name : "unknown");
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (payload) {
+        mqtt_publish(topic, payload, 0, 0, 1);
+        free(payload);
+    }
+}
+
 
 static void autopid_task(void *pvParameters)
 {
