@@ -1317,6 +1317,12 @@ static void autopid_task(void *pvParameters)
             xEventGroupWaitBits(xautopid_event_group, AUTOPID_REQUEST_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         }
 
+        // Skip processing if ECU is not connected
+        if (!(xEventGroupGetBits(xautopid_event_group) & ECU_CONNECTED_BIT)) {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+
         elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         
