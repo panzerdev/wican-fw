@@ -1563,6 +1563,9 @@ static void autopid_task(void *pvParameters)
 
         autopid_update_values();
         
+        // Publish all PID values combined in a JSON object to group topic at end of cycle
+        autopid_data_publish();
+        
         if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) {
             xEventGroupClearBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
         }
