@@ -588,7 +588,7 @@ char *autopid_data_read(void)
     return json_str;
 }
 
-void autopid_data_publish(void) {
+void autopid_data_publish(uint32_t cycle_counter) {
     if (!all_pids || !all_pids->mutex) {
         ESP_LOGE(TAG, "Invalid all_pids or mutex");
         DEBUG_LOGE(TAG, "Invalid all_pids or mutex");
@@ -598,6 +598,9 @@ void autopid_data_publish(void) {
     if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) == pdTRUE) {
         cJSON *root = cJSON_CreateObject();
         if (root) {
+            // Add cycle counter to the JSON payload
+            cJSON_AddNumberToObject(root, "cycle_counter", cycle_counter);
+            
             for (uint32_t i = 0; i < all_pids->pid_count; i++) {
                 pid_data2_t *curr_pid = &all_pids->pids[i];
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++) {
@@ -1094,7 +1097,7 @@ static bool all_parameters_failed(all_pids_t* all_pids) {
     return !any_success;
 }
 
-static void publish_parameter_mqtt(parameter_t *param) {
+static void publish_parameter_mqtt(parameter_t *param, uint32_t cycle_counter) {
     if (!param) return;
     
     char *payload = NULL;
@@ -1107,6 +1110,7 @@ static void publish_parameter_mqtt(parameter_t *param) {
             {
                 cJSON *param_json = cJSON_CreateObject();
                 if (param_json) {
+                    cJSON_AddNumberToObject(param_json, "cycle_counter", cycle_counter);
                     if (param->sensor_type == BINARY_SENSOR) {
                         cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
                     } else {
@@ -1128,6 +1132,7 @@ static void publish_parameter_mqtt(parameter_t *param) {
             {
                 cJSON *param_json = cJSON_CreateObject();
                 if (param_json) {
+                    cJSON_AddNumberToObject(param_json, "cycle_counter", cycle_counter);
                     if (param->sensor_type == BINARY_SENSOR) {
                         cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
                     } else {
@@ -1300,8 +1305,14 @@ static void autopid_task(void *pvParameters)
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
     DEBUG_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
 
+    // Cycle counter for tracking iterations (uint32_t supports billions of cycles)
+    static uint32_t cycle_counter = 0;
+
     while(1) 
     {
+        // Increment cycle counter at the beginning of each loop
+        cycle_counter++;
+        
         static bool autopid_status_published = false;
         if (!autopid_status_published) {
             // Announce that autopid has started periodic individual fetching
@@ -1450,7 +1461,7 @@ static void autopid_task(void *pvParameters)
                                                 ESP_LOGI(TAG, "Parameter %s result: %.2f", 
                                                         param->name, result);
                                                 param->value = result;
-                                                publish_parameter_mqtt(param);
+                                                publish_parameter_mqtt(param, cycle_counter);
                                             }
                                         } else {
                                             param->failed = true;
@@ -1507,7 +1518,7 @@ static void autopid_task(void *pvParameters)
                                                                         param->value, 
                                                                         pid_info->params[p].unit);
                                                         param->value = roundf(param->value * 100.0) / 100.0;
-                                                        publish_parameter_mqtt(param);
+                                                        publish_parameter_mqtt(param, cycle_counter);
                                                         break;
                                                     }
                                                 }
@@ -1564,7 +1575,7 @@ static void autopid_task(void *pvParameters)
         autopid_update_values();
         
         // Publish all PID values combined in a JSON object to group topic at end of cycle
-        autopid_data_publish();
+        autopid_data_publish(cycle_counter);
         
         if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) {
             xEventGroupClearBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
@@ -1577,7 +1588,7 @@ static void autopid_task(void *pvParameters)
         {
             wc_timer_set(&group_cycle_timer, all_pids->cycle);
             
-            autopid_data_publish();
+            autopid_data_publish(cycle_counter);
         }
 
         if (wc_timer_is_expired(&ecu_check_timer)) {
